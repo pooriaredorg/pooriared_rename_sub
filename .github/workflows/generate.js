@@ -1,8 +1,7 @@
-// 🌟 تغییرات در اینجا: استفاده صریح از require برای ماژول‌های نصب شده
-const fs = require('fs');
-const path = require('path');
-const { Octokit } = require('@octokit/rest');
-const fetch = require('node-fetch'); // 🌟 نیاز به نصب در گام Install Dependencies
+// 🌟 تغییر کلیدی: استفاده از import برای ماژول‌های ESM
+import { Octokit } from '@octokit/rest';
+import fetch from 'node-fetch'; // برای استفاده از fetch در CommonJS
+import { Buffer } from 'buffer'; // برای استفاده از Buffer
 
 // متغیرهای محیطی را از فایل YAML دریافت کنید
 const CONFIG_URL = process.env.CONFIG_URL;
@@ -17,7 +16,6 @@ const octokit = new Octokit({ auth: GITHUB_TOKEN });
 // تابع برای دانلود محتوا
 async function fetchConfigs() {
     try {
-        // استفاده از fetch که نصب شده است
         const response = await fetch(CONFIG_URL); 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
