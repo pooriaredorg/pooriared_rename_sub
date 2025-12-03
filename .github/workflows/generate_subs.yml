@@ -26,23 +26,54 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        
-    - name: Run Subscriptions Generator Script (Generate Local File)
-      run: node .github/workflows/generate.js
-      env:
-        # استفاده از ماژول https داخلی Node.js
-        CONFIG_URL: "https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
-        CONFIG_NAME_SUFFIX: ${{ github.event.inputs.base_name_suffix }} 
-        CONFIG_INDEX: ${{ github.event.inputs.config_index }}
+    - name: Run Bash Script to Generate and Modify Config
+      id: generate_config
+      shell: bash # اجرای دستورات در محیط Bash
+      run: |
+        # متغیرهای ورودی
+        CUSTOM_SUFFIX="${{ github.event.inputs.base_name_suffix }}"
+        CONFIG_INDEX="${{ github.event.inputs.config_index }}"
+        CONFIG_URL="https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
+        BASE_FILE_NAME="POORIARED"
 
-    # 🌟 گام نهایی: Commit و Push کردن فایل‌های تولید شده (بدون نیاز به Octokit)
+        # 1. دانلود همه کانفیگ‌ها
+        ALL_CONFIGS=$(curl -s "$CONFIG_URL")
+        
+        # 2. بررسی تعداد کانفیگ‌ها
+        CONFIG_COUNT=$(echo "$ALL_CONFIGS" | wc -l)
+        
+        # 3. بررسی اعتبار ورودی
+        if ! [[ "$CONFIG_INDEX" =~ ^[0-9]+$ ]] || [ "$CONFIG_INDEX" -le 0 ] || [ "$CONFIG_INDEX" -gt "$CONFIG_COUNT" ]; then
+            echo "::error::❌ Invalid CONFIG_INDEX: $CONFIG_INDEX. Must be between 1 and $CONFIG_COUNT."
+            exit 1
+        fi
+
+        # 4. انتخاب کانفیگ مورد نظر (با استفاده از head و tail)
+        ORIGINAL_CONFIG=$(echo "$ALL_CONFIGS" | head -n "$CONFIG_INDEX" | tail -n 1)
+
+        # 5. تعیین نام فایل
+        if [ "$CONFIG_INDEX" -eq 1 ]; then
+            FILE_PREFIX="$BASE_FILE_NAME"
+        else
+            FILE_PREFIX="${BASE_FILE_NAME}$((CONFIG_INDEX - 1))"
+        fi
+        
+        FINAL_FILE_NAME="${FILE_PREFIX}${CUSTOM_SUFFIX}.txt"
+        OUTPUT_DIR="output"
+        
+        # 6. اصلاح نام کانفیگ داخلی (اضافه کردن پسوند به نام بعد از #)
+        MODIFIED_CONFIG=$(echo "$ORIGINAL_CONFIG" | sed "s/#.*$/#&${CUSTOM_SUFFIX}/" | sed "s/##/#/")
+
+        # 7. ساخت پوشه خروجی و نوشتن فایل
+        mkdir -p "$OUTPUT_DIR"
+        echo "$MODIFIED_CONFIG" > "$OUTPUT_DIR/$FINAL_FILE_NAME"
+
+        echo "✅ Created config: $OUTPUT_DIR/$FINAL_FILE_NAME"
+        echo "::set-output name=file_name::${FINAL_FILE_NAME}" # برای Commit
+        
+    # 🌟 گام نهایی: Commit و Push کردن فایل‌های تولید شده
     - name: Commit and Push Changes
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        commit_message: "🤖 Generated subscription: ${{ github.event.inputs.base_name_suffix }}-${{ github.event.inputs.config_index }}"
+        commit_message: "🤖 Generated sub: ${{ steps.generate_config.outputs.file_name }}"
         file_pattern: output/*.txt
-        # این اکشن از GITHUB_TOKEN داخلی برای احراز هویت استفاده می‌کند
