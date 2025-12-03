@@ -14,6 +14,10 @@ on:
         default: '1'
         type: string 
 
+# 🌟 مهم: اعطای مجوز نوشتن برای Commit کردن فایل
+permissions:
+  contents: write
+
 jobs:
   generate:
     runs-on: ubuntu-latest
@@ -27,18 +31,18 @@ jobs:
       with:
         node-version: '18'
         
-    # 🌟 گام اصلاحی: حذف package.json و نصب ساده‌تر
-    - name: Install Dependencies Globally
-      run: npm install @octokit/rest node-fetch
-
-    - name: Run Subscriptions Generator Script (Final Attempt)
-      id: generate
-      # 🌟 اجرای مستقیم فایل با Node (بدون npx و فقط با مسیر نسبی)
-      # در این حالت، Action تمام وابستگی‌ها را در مسیر اصلی نصب کرده است.
+    - name: Run Subscriptions Generator Script (Generate Local File)
       run: node .github/workflows/generate.js
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # استفاده از ماژول https داخلی Node.js
         CONFIG_URL: "https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
-        
         CONFIG_NAME_SUFFIX: ${{ github.event.inputs.base_name_suffix }} 
         CONFIG_INDEX: ${{ github.event.inputs.config_index }}
+
+    # 🌟 گام نهایی: Commit و Push کردن فایل‌های تولید شده (بدون نیاز به Octokit)
+    - name: Commit and Push Changes
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "🤖 Generated subscription: ${{ github.event.inputs.base_name_suffix }}-${{ github.event.inputs.config_index }}"
+        file_pattern: output/*.txt
+        # این اکشن از GITHUB_TOKEN داخلی برای احراز هویت استفاده می‌کند
