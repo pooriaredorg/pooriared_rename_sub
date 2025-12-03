@@ -1,16 +1,15 @@
-name: 🔄 Rename Subscription Links
+name: 🔄 Rename JSON Subscription Links to Base64
 
 on:
-  # این بخش "رابط کاربری" شماست که امکان اجرای دستی و گرفتن ورودی را فراهم می‌کند
   workflow_dispatch:
     inputs:
       sub_url:
-        description: 'لینک سابسکریپشن اصلی (Base64)'
+        description: 'لینک سابسکریپشن JSON اصلی (مثل لینک Clash)'
         required: true
-      new_names:
-        description: 'نام‌های جدید برای کانفیگ‌ها (هر نام در یک خط جدید وارد شود)'
+      name_prefix:
+        description: 'پیشوند نام‌های جدید (مثلاً pooriared. خروجی: pooriared1، pooriared2)'
         required: true
-        default: 'Server 1\nServer 2\nServer 3' # مثال برای سهولت استفاده
+        default: 'POORIARED'
 
 jobs:
   rename_and_update:
@@ -28,17 +27,16 @@ jobs:
       - name: 📦 Install dependencies (requests)
         run: pip install requests
 
-      - name: 🚀 Run Python Script to Rename
+      - name: 🚀 Run Python Script to Convert and Rename
         run: python rename_sub.py
         env:
-          # ارسال ورودی‌های کاربر به عنوان متغیر محیطی به اسکریپت
           SUB_URL: ${{ github.event.inputs.sub_url }}
-          NEW_NAMES: ${{ github.event.inputs.new_names }}
+          NAME_PREFIX: ${{ github.event.inputs.name_prefix }}
 
       - name: 💾 Commit and push new subscription file
-        # از یک اکشن آماده برای Commit خودکار فایل استفاده می‌کنیم
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          file_pattern: custom_sub.txt
-          commit_message: 'Update custom_sub.txt with renamed configs'
-          branch: main # یا master، بسته به نام شاخه اصلی شما
+          # نام فایل خروجی جدید
+          file_pattern: POORIARED_sub.txt 
+          commit_message: 'Update POORIARED_sub.txt with renamed Base64 configs'
+          branch: main
