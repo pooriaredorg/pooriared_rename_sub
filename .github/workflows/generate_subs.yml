@@ -1,0 +1,29 @@
+name: Generate Subscriptions
+
+on:
+  workflow_dispatch: # این اجازه می دهد که بصورت دستی اجرا شود
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: Install dependencies (optional, but good practice if needed)
+      run: npm install
+
+    - name: Run Subscriptions Generator Script
+      id: generate
+      run: node .github/workflows/generate.js
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CONFIG_URL: "https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
+        BASE_NAME: "POORIARED" # نام پیشفرض شما
+        MAX_SUBS: 50 # حداکثر تعداد ساب ها
