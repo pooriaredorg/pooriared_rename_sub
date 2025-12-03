@@ -1,22 +1,32 @@
-// 🌟 تغییر کلیدی: استفاده از import برای ماژول‌های ESM
-import { Octokit } from '@octokit/rest';
-import fetch from 'node-fetch'; // برای استفاده از fetch در CommonJS
-import { Buffer } from 'buffer'; // برای استفاده از Buffer
+// دیگر نیازی به require یا import برای Octokit و fetch در بالای فایل نیست
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-// متغیرهای محیطی را از فایل YAML دریافت کنید
+// 🌟 تابع کمکی برای ایجاد Octokit و fetch به صورت داینامیک
+async function getTools() {
+    // 🌟 استفاده از Dynamic Import برای Octokit
+    const { Octokit } = await import('@octokit/rest');
+    
+    // 🌟 استفاده از fetch داخلی Node.js (اگر در v18 موجود نباشد، از node-fetch استفاده می‌کند)
+    const fetch = globalThis.fetch || (await import('node-fetch')).default;
+    
+    return { 
+        octokit: new Octokit({ auth: GITHUB_TOKEN }),
+        fetch: fetch 
+    };
+}
+
+// ... بقیه متغیرهای محیطی
 const CONFIG_URL = process.env.CONFIG_URL;
 const CONFIG_SUFFIX = process.env.CONFIG_NAME_SUFFIX; 
 const CONFIG_INDEX = parseInt(process.env.CONFIG_INDEX, 10); 
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const REPO_OWNER = process.env.GITHUB_REPOSITORY.split('/')[0];
 const REPO_NAME = process.env.GITHUB_REPOSITORY.split('/')[1];
 
-const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 // تابع برای دانلود محتوا
-async function fetchConfigs() {
+async function fetchConfigs(fetchTool) {
     try {
-        const response = await fetch(CONFIG_URL); 
+        const response = await fetchTool(CONFIG_URL); 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -32,13 +42,16 @@ async function fetchConfigs() {
 }
 
 // تابع برای ایجاد فایل و Commit در گیت‌هاب
-async function createCommit(fileName, content) {
+async function createCommit(octokitTool, fileName, content) {
+    // ... (منطق تابع ثابت است) ...
+    // باید octokit را از بیرون دریافت کند
+    
     const filePath = `output/${fileName}.txt`; 
 
     try {
         let sha = null;
         try {
-            const { data } = await octokit.repos.getContent({
+            const { data } = await octokitTool.repos.getContent({
                 owner: REPO_OWNER,
                 repo: REPO_NAME,
                 path: filePath,
@@ -48,7 +61,7 @@ async function createCommit(fileName, content) {
             // فایل وجود ندارد
         }
 
-        await octokit.repos.createOrUpdateFileContents({
+        await octokitTool.repos.createOrUpdateFileContents({
             owner: REPO_OWNER,
             repo: REPO_NAME,
             path: filePath,
@@ -64,9 +77,7 @@ async function createCommit(fileName, content) {
     }
 }
 
-/**
- * نام کانفیگ را در یک خط پروکسی مشخص پیدا کرده و پسوند را اضافه می‌کند.
- */
+// ... (تابع appendSuffixToConfigName ثابت می‌ماند) ...
 function appendSuffixToConfigName(configLine, suffix) {
     const nameDelimiter = '#';
     const safeSuffix = suffix.replace(/[^a-zA-Z0-9]/g, ''); 
@@ -82,9 +93,12 @@ function appendSuffixToConfigName(configLine, suffix) {
 }
 
 
-// تابع اصلی اجرای اسکریپت - فقط یک کانفیگ را پردازش می‌کند
+// تابع اصلی اجرای اسکریپت
 async function run() {
-    const allConfigs = await fetchConfigs();
+    // 🌟 فراخوانی ابزارها به صورت داینامیک
+    const { octokit, fetch: fetchTool } = await getTools();
+    
+    const allConfigs = await fetchConfigs(fetchTool);
     const configCount = allConfigs.length;
 
     if (configCount === 0) {
@@ -92,7 +106,6 @@ async function run() {
         return;
     }
     
-    // بررسی اعتبار ایندکس ورودی
     if (isNaN(CONFIG_INDEX) || CONFIG_INDEX <= 0 || CONFIG_INDEX > configCount) {
         console.error(`❌ Invalid CONFIG_INDEX: ${CONFIG_INDEX}. Must be between 1 and ${configCount}.`);
         return;
@@ -106,7 +119,6 @@ async function run() {
     
     console.log(`\n⚙️ Processing single config at index ${CONFIG_INDEX}...`);
     
-    // 1. تعیین نام فایل بر اساس ایندکس ورودی
     let fileNamePrefix;
     if (CONFIG_INDEX === 1) {
         fileNamePrefix = BASE_FILE_NAME; 
@@ -114,17 +126,12 @@ async function run() {
         fileNamePrefix = `${BASE_FILE_NAME}${CONFIG_INDEX - 1}`; 
     }
     
-    // نام نهایی فایل: (POORIARED1) + (ali)
     const fileName = `${fileNamePrefix}${suffix}`;
-
-    // 2. اصلاح کانفیگ داخلی
     const modifiedConfig = appendSuffixToConfigName(originalConfig, suffix);
-
-    // 3. ایجاد و Commit فایل
     const content = modifiedConfig;
 
     console.log(`\n⏳ Creating/Updating ${fileName}.txt...`);
-    await createCommit(fileName, content);
+    await createCommit(octokit, fileName, content); // 🌟 ارسال octokit به تابع
     
     console.log(`\n🎉 Done! Created single subscription file: ${fileName}.txt.`);
 }
