@@ -1,83 +1,36 @@
-// دیگر نیازی به require یا import برای Octokit و fetch در بالای فایل نیست
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+const fs = require('fs');
+const path = require('path');
+const https = require('https'); 
 
-// 🌟 تابع کمکی برای ایجاد Octokit و fetch به صورت داینامیک
-async function getTools() {
-    // 🌟 استفاده از Dynamic Import برای Octokit
-    const { Octokit } = await import('@octokit/rest');
-    
-    // 🌟 استفاده از fetch داخلی Node.js (اگر در v18 موجود نباشد، از node-fetch استفاده می‌کند)
-    const fetch = globalThis.fetch || (await import('node-fetch')).default;
-    
-    return { 
-        octokit: new Octokit({ auth: GITHUB_TOKEN }),
-        fetch: fetch 
-    };
-}
-
-// ... بقیه متغیرهای محیطی
+// متغیرهای محیطی را از فایل YAML دریافت کنید
 const CONFIG_URL = process.env.CONFIG_URL;
 const CONFIG_SUFFIX = process.env.CONFIG_NAME_SUFFIX; 
 const CONFIG_INDEX = parseInt(process.env.CONFIG_INDEX, 10); 
-const REPO_OWNER = process.env.GITHUB_REPOSITORY.split('/')[0];
-const REPO_NAME = process.env.GITHUB_REPOSITORY.split('/')[1];
-
 
 // تابع برای دانلود محتوا
-async function fetchConfigs(fetchTool) {
-    try {
-        const response = await fetchTool(CONFIG_URL); 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const text = await response.text();
-        const configs = text.split('\n').filter(line => line.trim() !== '');
-        
-        console.log(`✅ ${configs.length} configs fetched.`);
-        return configs;
-    } catch (error) {
-        console.error("❌ Error fetching configs:", error);
-        return [];
-    }
-}
-
-// تابع برای ایجاد فایل و Commit در گیت‌هاب
-async function createCommit(octokitTool, fileName, content) {
-    // ... (منطق تابع ثابت است) ...
-    // باید octokit را از بیرون دریافت کند
-    
-    const filePath = `output/${fileName}.txt`; 
-
-    try {
-        let sha = null;
-        try {
-            const { data } = await octokitTool.repos.getContent({
-                owner: REPO_OWNER,
-                repo: REPO_NAME,
-                path: filePath,
+function fetchConfigs() {
+    return new Promise((resolve, reject) => {
+        // استفاده از https داخلی برای دانلود
+        https.get(CONFIG_URL, (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+                data += chunk;
             });
-            sha = data.sha;
-        } catch (e) {
-            // فایل وجود ندارد
-        }
-
-        await octokitTool.repos.createOrUpdateFileContents({
-            owner: REPO_OWNER,
-            repo: REPO_NAME,
-            path: filePath,
-            message: `🤖 Update subscription: ${fileName}`,
-            content: Buffer.from(content).toString('base64'),
-            sha: sha, 
-            branch: process.env.GITHUB_REF_NAME || 'main', 
+            res.on('end', () => {
+                const configs = data.split('\n').filter(line => line.trim() !== '');
+                console.log(`✅ ${configs.length} configs fetched.`);
+                resolve(configs);
+            });
+        }).on('error', (err) => {
+            console.error("❌ Error fetching configs:", err.message);
+            reject(err);
         });
-        
-        console.log(`  ➕ Successfully committed: ${filePath}`);
-    } catch (error) {
-        console.error(`  ❌ Error committing ${fileName}:`, error.message);
-    }
+    });
 }
 
-// ... (تابع appendSuffixToConfigName ثابت می‌ماند) ...
+/**
+ * نام کانفیگ را در یک خط پروکسی مشخص پیدا کرده و پسوند را اضافه می‌کند.
+ */
 function appendSuffixToConfigName(configLine, suffix) {
     const nameDelimiter = '#';
     const safeSuffix = suffix.replace(/[^a-zA-Z0-9]/g, ''); 
@@ -92,13 +45,9 @@ function appendSuffixToConfigName(configLine, suffix) {
     return configLine;
 }
 
-
-// تابع اصلی اجرای اسکریپت
+// تابع اصلی اجرای اسکریپت - فقط یک کانفیگ را پردازش می‌کند
 async function run() {
-    // 🌟 فراخوانی ابزارها به صورت داینامیک
-    const { octokit, fetch: fetchTool } = await getTools();
-    
-    const allConfigs = await fetchConfigs(fetchTool);
+    const allConfigs = await fetchConfigs();
     const configCount = allConfigs.length;
 
     if (configCount === 0) {
@@ -106,7 +55,9 @@ async function run() {
         return;
     }
     
+    // 🌟 رفع خطای NaN
     if (isNaN(CONFIG_INDEX) || CONFIG_INDEX <= 0 || CONFIG_INDEX > configCount) {
+        // این پیام خطا به دلیل اجرای ناموفق قبلی است، اما کد جدید تضمین می‌کند که اگر ورودی NaN باشد، متوقف شود.
         console.error(`❌ Invalid CONFIG_INDEX: ${CONFIG_INDEX}. Must be between 1 and ${configCount}.`);
         return;
     }
@@ -127,13 +78,21 @@ async function run() {
     }
     
     const fileName = `${fileNamePrefix}${suffix}`;
-    const modifiedConfig = appendSuffixToConfigName(originalConfig, suffix);
-    const content = modifiedConfig;
-
-    console.log(`\n⏳ Creating/Updating ${fileName}.txt...`);
-    await createCommit(octokit, fileName, content); // 🌟 ارسال octokit به تابع
     
-    console.log(`\n🎉 Done! Created single subscription file: ${fileName}.txt.`);
+    // ساخت مسیر فایل (output/POORIARED1ali.txt)
+    const outputDir = path.join(process.cwd(), 'output');
+    const filePath = path.join(outputDir, `${fileName}.txt`);
+
+    const modifiedConfig = appendSuffixToConfigName(originalConfig, suffix);
+    
+    // 🌟 ساخت پوشه output و نوشتن فایل به صورت محلی
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir);
+    }
+    
+    fs.writeFileSync(filePath, modifiedConfig);
+    
+    console.log(`\n🎉 Done! Created local file: ${filePath}`);
 }
 
 run();
