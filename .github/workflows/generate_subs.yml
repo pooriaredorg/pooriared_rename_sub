@@ -27,13 +27,17 @@ jobs:
       with:
         node-version: '18'
         
-    # گام مهم برای رفع خطای MODULE_NOT_FOUND (مجوز اجرا)
+    # 🌟 گام جدید: نصب وابستگی‌های لازم
+    - name: Install Dependencies
+      run: npm install @octokit/rest node-fetch --prefix .github/workflows
+        
     - name: Give execute permission to script
       run: chmod +x .github/workflows/generate.js
 
     - name: Run Subscriptions Generator Script
       id: generate
-      run: node .github/workflows/generate.js
+      # 🌟 اجرای اسکریپت با مسیر مطلق برای حل خطای Module Not Found
+      run: node $GITHUB_WORKSPACE/.github/workflows/generate.js 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         CONFIG_URL: "https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
