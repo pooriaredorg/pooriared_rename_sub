@@ -27,16 +27,18 @@ jobs:
       with:
         node-version: '18'
         
-    # 🌟 گام جدید: نصب وابستگی‌های لازم
-    - name: Install Dependencies
-      run: npm install @octokit/rest node-fetch --prefix .github/workflows
+    # 🌟 گام جدید: ایجاد package.json برای فعال کردن ESM و نصب وابستگی‌ها
+    - name: Setup ESM and Install Dependencies
+      run: |
+        echo '{"type": "module"}' > .github/workflows/package.json
+        npm install @octokit/rest node-fetch --prefix .github/workflows
         
     - name: Give execute permission to script
       run: chmod +x .github/workflows/generate.js
 
     - name: Run Subscriptions Generator Script
       id: generate
-      # 🌟 اجرای اسکریپت با مسیر مطلق برای حل خطای Module Not Found
+      # 🌟 اجرای مستقیم فایل
       run: node $GITHUB_WORKSPACE/.github/workflows/generate.js 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
