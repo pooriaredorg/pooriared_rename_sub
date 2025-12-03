@@ -6,9 +6,9 @@ on:
       base_name_suffix:
         description: 'نامی که می‌خواهید به انتهای نام ساب‌ها و فایل‌ها اضافه شود (مثلاً ALI)'
         required: true
-        default: 'suffix' # تغییر پیش‌فرض به یک نام عمومی
+        default: 'suffix'
         type: string
-      config_index: # 🌟 ورودی جدید برای شماره کانفیگ
+      config_index: 
         description: 'شماره کانفیگی که می‌خواهید به ساب تبدیل شود (مثلاً 1 برای کانفیگ اول)'
         required: true
         default: '1'
@@ -21,12 +21,16 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    
+      
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         
+    # گام مهم برای رفع خطای MODULE_NOT_FOUND (مجوز اجرا)
+    - name: Give execute permission to script
+      run: chmod +x .github/workflows/generate.js
+
     - name: Run Subscriptions Generator Script
       id: generate
       run: node .github/workflows/generate.js
@@ -35,4 +39,4 @@ jobs:
         CONFIG_URL: "https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
         
         CONFIG_NAME_SUFFIX: ${{ github.event.inputs.base_name_suffix }} 
-        CONFIG_INDEX: ${{ github.event.inputs.config_index }} # 🌟 ارسال شماره به اسکریپت
+        CONFIG_INDEX: ${{ github.event.inputs.config_index }}
