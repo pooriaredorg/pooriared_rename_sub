@@ -27,19 +27,15 @@ jobs:
       with:
         node-version: '18'
         
-    # 🌟 گام جدید: ایجاد package.json برای فعال کردن ESM و نصب وابستگی‌ها
-    - name: Setup ESM and Install Dependencies
-      run: |
-        echo '{"type": "module"}' > .github/workflows/package.json
-        npm install @octokit/rest node-fetch --prefix .github/workflows
-        
-    - name: Give execute permission to script
-      run: chmod +x .github/workflows/generate.js
+    # 🌟 گام اصلاحی: حذف package.json و نصب ساده‌تر
+    - name: Install Dependencies Globally
+      run: npm install @octokit/rest node-fetch
 
-    - name: Run Subscriptions Generator Script
+    - name: Run Subscriptions Generator Script (Final Attempt)
       id: generate
-      # 🌟 اجرای مستقیم فایل
-      run: node $GITHUB_WORKSPACE/.github/workflows/generate.js 
+      # 🌟 اجرای مستقیم فایل با Node (بدون npx و فقط با مسیر نسبی)
+      # در این حالت، Action تمام وابستگی‌ها را در مسیر اصلی نصب کرده است.
+      run: node .github/workflows/generate.js
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         CONFIG_URL: "https://raw.githubusercontent.com/pooriaredorg/pooriaredorg/refs/heads/main/configs/proxy_configs.txt"
