@@ -1,90 +1,142 @@
-import base64
 import requests
 import sys
 import os
-from urllib.parse import urlparse, urlunparse, quote, unquote
+import json
+import base64
+from urllib.parse import urlencode, quote
 
-def rename_configs(sub_link, new_names_input):
+def convert_json_to_url(proxy_config, index, name_prefix):
     """
-    دریافت سابسکریپشن، تغییر نام کانفیگ‌ها و برگرداندن ساب جدید
+    تبدیل یک آبجکت پراکسی JSON (برای Clash) به یک رشته URL (برای Vmess/VLESS)
     """
-    
-    # آماده‌سازی نام‌ها: جدا کردن نام‌ها با خط جدید و حذف فاصله‌های اضافی
-    new_names_list = [name.strip() for name in new_names_input.split('\n') if name.strip()]
-    if not new_names_list:
-        return "ERROR: No new names were provided. Please provide a list of names."
-
     try:
-        # 1. دریافت محتوای ساب اصلی
-        print(f"در حال دریافت محتوای ساب از: {sub_link}")
-        response = requests.get(sub_link, timeout=15)
+        # نام‌گذاری خودکار: پیشوند + شماره
+        new_name = f"{name_prefix}{index}"
+        
+        # تعیین نوع پروتکل
+        proxy_type = proxy_config.get('type', '').lower()
+        
+        # --- منطق تبدیل ---
+        if proxy_type == 'vmess':
+            # برای Vmess، ساختار URL از یک آبجکت JSON Base64 شده است
+            # (این فرمت با فرمت JSON ساب Clash کمی متفاوت است و نیاز به دقت دارد)
+            
+            # ساده‌سازی: اگر ساختار ساب JSON شما از قبل URLهای Vmess را نگه می‌دارد، 
+            # فقط باید نام (remark) را تغییر دهیم. اما چون شما یک ساب Clash (با ساختار آبجکت) دادید، 
+            # فرض می‌کنیم باید آن را به فرمت Vmess/VLESS URL تبدیل کنیم.
+
+            # فرض می‌کنیم تمام اطلاعات لازم در پراکسی وجود دارد
+            url_data = {
+                'v': '2',
+                'ps': new_name,  # نام جدید
+                'add': proxy_config.get('server'),
+                'port': int(proxy_config.get('port')),
+                'id': proxy_config.get('uuid'),
+                'aid': proxy_config.get('alterId', 0),
+                'net': proxy_config.get('network'),
+                # فیلدهای دیگر مانند security, type, host, path, tls/sni...
+            }
+            # این بخش تبدیل، بسته به جزئیات JSON شما، ممکن است نیاز به اصلاح داشته باشد.
+            # اینجا فقط یک نمونه ساده از رایج‌ترین فیلدها آورده شده است.
+            
+            json_str = json.dumps(url_data)
+            encoded_json = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+            return f"vmess://{encoded_json}"
+        
+        elif proxy_type == 'vless' or proxy_type == 'trojan':
+            # برای VLESS/Trojan، ساختار URL متفاوتی دارد
+            # vless://uuid@server:port?params#remark
+            
+            # پارامترهای اصلی
+            uuid = proxy_config.get('uuid', proxy_config.get('password'))
+            server = proxy_config.get('server')
+            port = proxy_config.get('port')
+            
+            # پارامترهای اضافی (query parameters)
+            query_params = {
+                'security': proxy_config.get('tls', 'none'),
+                'type': proxy_config.get('network'),
+                # دیگر پارامترها (host, path, sni, fp, ...): باید به دقت از JSON استخراج شوند
+                'host': proxy_config.get('ws-opts', {}).get('headers', {}).get('Host'),
+                'path': proxy_config.get('ws-opts', {}).get('path'),
+            }
+            
+            # حذف پارامترهای None
+            query_params = {k: v for k, v in query_params.items() if v is not None}
+            
+            query_string = urlencode(query_params, quote_via=quote)
+            
+            # ساخت URL
+            url_scheme = f"{proxy_type}://{uuid}@{server}:{port}"
+            return f"{url_scheme}?{query_string}#{quote(new_name)}"
+            
+        else:
+            return None # پروتکل ناشناخته
+
+    except Exception as e:
+        print(f"Error converting config {index}: {e}")
+        return None
+
+
+def process_and_convert(sub_link, name_prefix):
+    """
+    دریافت JSON، تبدیل به URL، تغییر نام و Base64 کردن خروجی نهایی
+    """
+    try:
+        print(f"در حال دریافت محتوای JSON از: {sub_link}")
+        response = requests.get(sub_link, timeout=20) 
         response.raise_for_status() 
+        data = response.json()
         
-        # 2. دیکد کردن محتوا (Base64)
-        encoded_content = response.text.strip()
-        decoded_content = base64.b64decode(encoded_content).decode('utf-8')
+        if 'proxies' not in data or not isinstance(data['proxies'], list):
+             return "ERROR: JSON structure is not recognized (missing 'proxies' list)."
+             
+        proxies = data['proxies']
+        url_configs = []
         
-        # 3. پردازش و تغییر نام
-        configs = decoded_content.split('\n')
-        new_configs = []
-        name_index = 0
+        for i, proxy in enumerate(proxies):
+            # تبدیل هر کانفیگ JSON به فرمت URL مورد نیاز
+            url_config = convert_json_to_url(proxy, i + 1, name_prefix)
+            
+            if url_config:
+                url_configs.append(url_config)
+            
+        if not url_configs:
+            return "ERROR: No convertible configurations found."
+            
+        # 1. ترکیب همه URLها با خط جدید
+        final_decoded_content = '\n'.join(url_configs)
         
-        for config_url in configs:
-            if not config_url.strip():
-                continue
-            
-            # انتخاب نام جدید از لیست (اگر تعداد کانفیگ بیشتر از نام‌ها باشد، نام‌ها تکرار می‌شوند)
-            new_name = new_names_list[name_index % len(new_names_list)]
-            
-            # منطق تغییر نام برای کانفیگ‌های URL-محور (Vmess/VLESS/Trojan)
-            # نام (Remark) در بخش Fragment (بخش بعد از #) ذخیره می‌شود
-            parsed_url = urlparse(config_url)
-            
-            # انکد کردن نام جدید برای استفاده در URL (باید URL-Safe باشد)
-            encoded_new_name = quote(new_name, safe='') 
-            
-            # ساخت URL جدید با نام جدید به عنوان fragment
-            new_config = urlunparse((
-                parsed_url.scheme, 
-                parsed_url.netloc, 
-                parsed_url.path, 
-                parsed_url.params, 
-                parsed_url.query, 
-                encoded_new_name
-            ))
-            
-            new_configs.append(new_config)
-            name_index += 1
-            
-        final_decoded_sub = '\n'.join(new_configs)
-        
-        # 4. انکد کردن مجدد (Base64)
-        final_encoded_sub = base64.b64encode(final_decoded_sub.encode('utf-8')).decode('utf-8')
-        
+        # 2. Base64 کردن کل محتوا
+        final_encoded_sub = base64.b64encode(final_decoded_content.encode('utf-8')).decode('utf-8')
+
         return final_encoded_sub
 
+    except requests.exceptions.RequestException as e:
+        return f"ERROR: Failed to fetch subscription link: {e}"
+    except json.JSONDecodeError:
+        return "ERROR: Content is not valid JSON."
     except Exception as e:
         return f"ERROR: An unexpected error occurred: {e}"
 
 # --- اجرای اسکریپت با ورودی‌های GitHub Actions ---
 if __name__ == "__main__":
     
-    # دریافت ورودی‌ها از متغیرهای محیطی GitHub Actions
     sub_url = os.environ.get('SUB_URL')
-    new_names = os.environ.get('NEW_NAMES')
-    output_filename = "custom_sub.txt" 
+    name_prefix = os.environ.get('NAME_PREFIX')
+    output_filename = "POORIARED_sub.txt" # نام فایل خروجی جدید
     
-    if not sub_url or not new_names:
-        print("Error: SUB_URL and NEW_NAMES must be provided.")
+    if not sub_url or not name_prefix:
+        print("Error: SUB_URL and NAME_PREFIX must be provided.")
         sys.exit(1)
 
-    result_content = rename_configs(sub_url, new_names)
+    result_content = process_and_convert(sub_url, name_prefix)
     
     if result_content.startswith("ERROR:"):
         print(result_content)
         sys.exit(1)
     else:
-        # ذخیره محتوای جدید در فایلی که قرار است به GitHub Commit شود
+        # ذخیره محتوای Base64
         with open(output_filename, "w") as f:
             f.write(result_content)
-        print(f"✅ فایل '{output_filename}' با موفقیت ایجاد شد و آماده Commit است.")
+        print(f"\n✅ فایل Base64 با نام '{output_filename}' با موفقیت ایجاد شد.")
