@@ -1,6 +1,8 @@
+// 🌟 تغییرات در اینجا: استفاده صریح از require برای ماژول‌های نصب شده
 const fs = require('fs');
 const path = require('path');
 const { Octokit } = require('@octokit/rest');
+const fetch = require('node-fetch'); // 🌟 نیاز به نصب در گام Install Dependencies
 
 // متغیرهای محیطی را از فایل YAML دریافت کنید
 const CONFIG_URL = process.env.CONFIG_URL;
@@ -15,7 +17,8 @@ const octokit = new Octokit({ auth: GITHUB_TOKEN });
 // تابع برای دانلود محتوا
 async function fetchConfigs() {
     try {
-        const response = await fetch(CONFIG_URL);
+        // استفاده از fetch که نصب شده است
+        const response = await fetch(CONFIG_URL); 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -32,7 +35,7 @@ async function fetchConfigs() {
 
 // تابع برای ایجاد فایل و Commit در گیت‌هاب
 async function createCommit(fileName, content) {
-    const filePath = `output/${fileName}.txt`; // فایل‌ها در پوشه output ذخیره می‌شوند
+    const filePath = `output/${fileName}.txt`; 
 
     try {
         let sha = null;
@@ -110,7 +113,6 @@ async function run() {
     if (CONFIG_INDEX === 1) {
         fileNamePrefix = BASE_FILE_NAME; 
     } else {
-        // مثلاً برای index 2، POORIARED1
         fileNamePrefix = `${BASE_FILE_NAME}${CONFIG_INDEX - 1}`; 
     }
     
