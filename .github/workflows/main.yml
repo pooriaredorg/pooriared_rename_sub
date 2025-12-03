@@ -1,42 +1,38 @@
-name: 🔄 Rename JSON Subscription Links to Base64
+name: 🔄 Update Xray Subscription
 
 on:
   workflow_dispatch:
     inputs:
-      sub_url:
-        description: 'لینک سابسکریپشن JSON اصلی (مثل لینک Clash)'
+      sub_links:
+        description: 'لینک‌های سابسکریپشن V2Ray/Xray (با کاما جدا کنید)'
         required: true
-      name_prefix:
-        description: 'پیشوند نام‌های جدید (مثلاً pooriared. خروجی: pooriared1، pooriared2)'
-        required: true
-        default: 'POORIARED'
+        default: 'https://pooriared.faridiosak.workers.dev/...' # نمونه لینک
 
 jobs:
-  rename_and_update:
+  build:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: ⬇️ Checkout code
-        uses: actions/checkout@v4
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
 
-      - name: 🐍 Set up Python 3.x
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
 
-      - name: 📦 Install dependencies (requests)
-        run: pip install requests
+    - name: 🛠️ Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
 
-      - name: 🚀 Run Python Script to Convert and Rename
-        run: python rename_sub.py
-        env:
-          SUB_URL: ${{ github.event.inputs.sub_url }}
-          NAME_PREFIX: ${{ github.event.inputs.name_prefix }}
+    - name: 🏃 Run Aggregator Script
+      env:
+        SUB_LINKS: ${{ github.event.inputs.sub_links }} # ارسال لینک‌ها به اسکریپت
+      run: python aggregator.py
 
-      - name: 💾 Commit and push new subscription file
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          # نام فایل خروجی جدید
-          file_pattern: POORIARED_sub.txt 
-          commit_message: 'Update POORIARED_sub.txt with renamed Base64 configs'
-          branch: main
+    - name: 📤 Commit and Push new config
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "Auto update Xray Base64 config"
+        files: POORIARED_sub.txt # 👈 نام فایل خروجی جدید
